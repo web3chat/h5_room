@@ -1,0 +1,22 @@
+[Unit]
+Description=h5_room backend (LiveKit token + room metadata)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=h5room
+Group=h5room
+WorkingDirectory=/data/h5room
+ExecStart=/data/h5room/server -config /data/h5room/config.yaml
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/data/h5room
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,30 @@
+# h5_room 服务端配置示例
+#
+# 使用方式:
+#   cp config.example.yaml config.yaml
+#
+# config.yaml 已被 .gitignore 忽略。生产环境的 API secret、Redis 口令
+# 只放在服务器本地，不要提交到仓库。
+
+server:
+  listen: ":3000"
+  web_dir: "web/dist"
+  # TLS 推荐由 nginx 等反向代理终结，此时无需配置下面两项；
+  # 如需 Go 服务直接监听 HTTPS，再取消注释并填写证书路径:
+  # tls_cert: "certs/cert.pem"
+  # tls_key: "certs/key.pem"
+
+livekit:
+  api_base: "http://127.0.0.1:7880"
+  # 本地开发直连 LiveKit；部署在反向代理后时改为 wss://<域名>:443，
+  # 后端会按请求 Host 自动把 loopback 地址改写成客户端可访问的地址。
+  ws_url: "ws://127.0.0.1:7880"
+  # 本地开发默认值；生产环境必须更换，并与 livekit.yaml 的 keys 保持一致
+  api_key: "devkey"
+  api_secret: "secret"
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: "changeme" # 与 .env 的 REDIS_PASSWORD 一致
+  db: 0
+  pin_ttl_seconds: 0 # 房间 PIN 有效期(秒); 0 = 不过期; 86400 = 1 天

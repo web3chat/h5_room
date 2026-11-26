@@ -1,0 +1,11 @@
+server.exe
+server-linux
+web/dist/
+web/dist.zip
+web/node_modules/
+*.log
+.env
+config.yaml
+certs/
+.DS_Store
+.idea/

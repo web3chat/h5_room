@@ -1,0 +1,37 @@
+# h5_room 本地基础设施（Redis + LiveKit Server）
+#
+# 用法:
+#   cp .env.example .env    # 按需修改 REDIS_PASSWORD
+#   docker compose up -d
+#
+# 端口：
+#   Redis   127.0.0.1:6379   仅本机访问（Go 后端 + LiveKit 同机）
+#   LiveKit 7880(信令) 7881(TCP) 7882(UDP)  对外暴露，供浏览器/手机连接
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: h5room-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "", "--requirepass", "${REDIS_PASSWORD:-changeme}"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: h5room-livekit
+    restart: unless-stopped
+    depends_on:
+      - redis
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    command: ["--config", "/etc/livekit.yaml"]
+    ports:
+      - "7880:7880/tcp"   # WebSocket 信令
+      - "7881:7881/tcp"   # RTC over TCP
+      - "7882:7882/udp"   # RTC 媒体 UDP
+
+volumes:
+  redis-data:

@@ -1,0 +1,295 @@
+<!doctype html>
+<!--
+  device-test.html — 摄像头/麦克风独立自测页
+  不依赖钱包、不需要加入房间, 用于排查设备权限问题 (App WebView / 浏览器通用)。
+  访问: https://<host>/device-test.html
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>设备自测 · 摄像头/麦克风</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: rgba(255,255,255,.08);
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #3b82f6;
+    --ok: #4ade80;
+    --warn: #f59e0b;
+    --err: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
+  .sub { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+
+  .banner {
+    padding: .7rem .9rem; border-radius: 10px; font-size: .85rem;
+    background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.4);
+    color: #fcd34d; margin-bottom: 1.25rem;
+  }
+  .banner.ok { background: rgba(74,222,128,.08); border-color: rgba(74,222,128,.4); color: var(--ok); }
+  .banner.err { background: rgba(239,68,68,.1); border-color: rgba(239,68,68,.4); color: #fca5a5; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 1.25rem; margin-bottom: 1.25rem;
+  }
+  .card h2 { font-size: .95rem; margin: 0 0 .9rem; color: var(--muted); font-weight: 600; }
+
+  .btns { display: flex; flex-wrap: wrap; gap: .6rem; }
+  button {
+    font-family: inherit; font-size: .9rem; font-weight: 600;
+    padding: .6rem 1.1rem; border-radius: 10px; border: none; cursor: pointer;
+    color: #fff; background: var(--accent); transition: opacity .15s;
+  }
+  button:hover { opacity: .85; }
+  button:disabled { opacity: .35; cursor: not-allowed; }
+  button.secondary { background: #21262d; color: var(--text); border: 1px solid var(--border); }
+  button.danger { background: var(--err); }
+
+  video {
+    width: 100%; max-height: 340px; border-radius: 10px;
+    background: #000; transform: scaleX(-1); /* 镜像, 自拍视角 */
+    display: none; margin-top: .9rem;
+  }
+  video.on { display: block; }
+  .res { color: var(--muted); font-size: .78rem; margin-top: .4rem; }
+
+  .meter-wrap { margin-top: .9rem; display: none; }
+  .meter-wrap.on { display: block; }
+  .meter-label { font-size: .78rem; color: var(--muted); margin-bottom: .3rem; display: flex; justify-content: space-between; }
+  .meter {
+    height: 14px; border-radius: 7px; background: #21262d; overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .meter-bar {
+    height: 100%; width: 0%; border-radius: 7px;
+    background: linear-gradient(90deg, #22c55e, #eab308, #ef4444);
+    transition: width .08s linear;
+  }
+  .meter-peak { color: var(--muted); font-size: .75rem; margin-top: .3rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  th, td { text-align: left; padding: .45rem .5rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  .kind-cam { color: var(--ok); } .kind-mic { color: #60a5fa; }
+  .empty { color: var(--muted); font-size: .85rem; padding: .5rem; }
+
+  .log {
+    font-family: Consolas, "SF Mono", monospace; font-size: .8rem;
+    background: #0d1117; border: 1px solid var(--border); border-radius: 10px;
+    padding: .7rem .9rem; min-height: 2.6rem; white-space: pre-wrap; word-break: break-all;
+  }
+  .log .t { color: var(--muted); }
+  .log .ok { color: var(--ok); }
+  .log .err { color: #fca5a5; }
+  #lastError { color: #fca5a5; font-size: .85rem; margin-top: .6rem; white-space: pre-wrap; word-break: break-all; }
+  .hint { color: var(--muted); font-size: .78rem; margin-top: .6rem; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📷 摄像头 / 麦克风自测</h1>
+  <p class="sub">独立测试页 · 不需要钱包 · 不加入房间 · App WebView 与浏览器通用</p>
+
+  <div id="secureBanner" class="banner" style="display:none">
+    ⚠️ 当前不是安全上下文(HTTPS)。getUserMedia 只在 HTTPS 或 localhost 下可用, 请通过 https:// 访问本页。
+  </div>
+
+  <div class="card">
+    <h2>① 可用设备列表</h2>
+    <table>
+      <thead><tr><th>类型</th><th>设备名称</th></tr></thead>
+      <tbody id="devList"><tr><td colspan="2" class="empty">点击下方任一测试按钮后刷新此处, 设备名称需要授权后才可见</td></tr></tbody>
+    </table>
+    <div class="hint">若列表为空或只有部分设备: 说明系统/浏览器未暴露该设备 —— 对应进房时报 NotFoundError。</div>
+  </div>
+
+  <div class="card">
+    <h2>② 单项测试</h2>
+    <div class="btns">
+      <button id="btnCam" onclick="startCam()">📷 开启摄像头</button>
+      <button id="btnMic" class="secondary" onclick="startMic()">🎤 开启麦克风</button>
+      <button id="btnBoth" class="secondary" onclick="startBoth()">🚀 同时开启 (模拟进房)</button>
+      <button id="btnStop" class="danger" onclick="stopAll()" disabled>⏹ 停止全部</button>
+    </div>
+
+    <video id="video" autoplay muted playsinline></video>
+    <div class="res" id="videoRes"></div>
+
+    <div class="meter-wrap" id="meterWrap">
+      <div class="meter-label"><span id="micState">🎤 音量</span><span id="micDb">—</span></div>
+      <div class="meter"><div class="meter-bar" id="meterBar"></div></div>
+      <div class="meter-peak" id="meterPeak"></div>
+    </div>
+
+    <div id="lastError"></div>
+  </div>
+
+  <div class="card">
+    <h2>③ 测试日志 (含精确错误名, 可直接发给排查人员)</h2>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="hint">
+    错误名对照:<br>
+    NotAllowedError — 权限被拒/未弹授权框: 检查浏览器地址栏站点权限, 以及 Windows「设置 → 隐私 → 相机/麦克风」总开关<br>
+    NotFoundError — 未检测到设备: 台式机无摄像头时, 麦克风单独测试仍可通过<br>
+    NotReadableError — 设备被其他程序占用 (微信/腾讯会议/相机 App)<br>
+    SecurityError — 页面非 HTTPS<br>
+    在 App 内置 WebView 中打开本页报 NotAllowedError: 说明 App 未处理 WebView 权限回调 (Android onPermissionRequest / iOS 缺用法声明), 需 App 端修复。
+  </div>
+</div>
+
+<script>
+let streams = [];        // 当前活跃的所有 MediaStream
+let analyser = null, audioCtx = null, meterRAF = null;
+let micPeak = 0, lastVoiceDetect = 0;
+
+const $ = (id) => document.getElementById(id);
+const logBox = $('log');
+
+if (!window.isSecureContext) $('secureBanner').style.display = 'block';
+
+function log(msg, cls) {
+  const line = document.createElement('div');
+  line.innerHTML = '<span class="t">' + new Date().toLocaleTimeString() + '</span> ' + msg;
+  if (cls) line.classList.add(cls);
+  logBox.prepend(line);
+  while (logBox.children.length > 40) logBox.removeChild(logBox.lastChild);
+}
+
+function fail(e, action) {
+  const name = (e && e.name) || 'UnknownError';
+  const msg = (e && e.message) || '';
+  log(`<span class="err">✗ ${action} 失败: ${name}</span>${msg ? ' — ' + msg : ''}`, 'err');
+  $('lastError').textContent = `${action}失败\n错误名: ${name}\n详情: ${msg}`;
+  $('btnCam').disabled = $('btnMic').disabled = $('btnBoth').disabled = false;
+  $('btnStop').disabled = true;
+  console.error(action, e);
+}
+
+function showVideo(stream) {
+  const v = $('video');
+  v.srcObject = stream;
+  v.classList.add('on');
+  const track = stream.getVideoTracks()[0];
+  if (track) {
+    const s = track.getSettings();
+    $('videoRes').textContent = `分辨率 ${s.width}×${s.height} · ${track.label} (${s.frameRate || '?'}fps)`;
+  }
+  log(`<span class="ok">✓ 摄像头已开启: ${stream.getVideoTracks()[0].label}</span>`, 'ok');
+}
+
+function showMicMeter(stream) {
+  $('meterWrap').classList.add('on');
+  audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 1024;
+  const src = audioCtx.createMediaStreamSource(stream);
+  src.connect(analyser);
+  micPeak = 0; lastVoiceDetect = 0;
+  const data = new Uint8Array(analyser.frequencyBinCount);
+
+  const tick = () => {
+    analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const v = (data[i] - 128) / 128;
+      sum += v * v;
+    }
+    const rms = Math.sqrt(sum / data.length);
+    const pct = Math.min(100, Math.round(rms * 260));
+    $('meterBar').style.width = pct + '%';
+    $('micDb').textContent = (rms * 100).toFixed(1);
+    if (rms > 0.25) { micPeak = pct; lastVoiceDetect = Date.now(); }
+    $('meterPeak').textContent = micPeak > 0 && Date.now() - lastVoiceDetect < 3000
+      ? '🔊 检测到声音 (峰值 ' + micPeak + '%)' : '说话试试 — 检测到声音后这里会显示';
+    meterRAF = requestAnimationFrame(tick);
+  };
+  tick();
+  log(`<span class="ok">✓ 麦克风已开启: ${stream.getAudioTracks()[0].label}</span>`, 'ok');
+}
+
+function startCam() {
+  stopAll(true);
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then((s) => { streams.push(s); showVideo(s); refreshDevices(); })
+    .catch((e) => fail(e, '开启摄像头'));
+}
+
+function startMic() {
+  stopAll(true);
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then((s) => { streams.push(s); showMicMeter(s); refreshDevices(); })
+    .catch((e) => fail(e, '开启麦克风'));
+}
+
+// 与进房探测完全一致: audio+video 同时请求
+function startBoth() {
+  stopAll(true);
+  navigator.mediaDevices.getUserMedia({ audio: true, video: true })
+    .then((s) => {
+      streams.push(s);
+      showVideo(s); showMicMeter(s);
+      refreshDevices();
+      log('<span class="ok">✓ 摄像头+麦克风同时开启成功 —— 进房探测必过</span>', 'ok');
+    })
+    .catch((e) => fail(e, '同时开启 (进房探测)'));
+}
+
+function stopAll(silent) {
+  streams.forEach((s) => s.getTracks().forEach((t) => t.stop()));
+  streams = [];
+  if (analyser) { analyser.disconnect(); analyser = null; }
+  if (audioCtx) { audioCtx.close().catch(() => {}); audioCtx = null; }
+  if (meterRAF) cancelAnimationFrame(meterRAF);
+  $('video').srcObject = null;
+  $('video').classList.remove('on');
+  $('videoRes').textContent = '';
+  $('meterWrap').classList.remove('on');
+  $('meterBar').style.width = '0%';
+  $('btnCam').disabled = $('btnMic').disabled = $('btnBoth').disabled = false;
+  $('btnStop').disabled = true;
+  if (!silent) log('⏹ 已停止全部设备');
+}
+
+function refreshDevices() {
+  navigator.mediaDevices.enumerateDevices().then((ds) => {
+    const tb = $('devList');
+    const rows = ds.filter((d) => d.kind === 'audioinput' || d.kind === 'videoinput');
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td colspan="2" class="empty">未检测到任何输入设备</td></tr>';
+      return;
+    }
+    tb.innerHTML = rows.map((d) =>
+      '<tr><td class="' + (d.kind === 'videoinput' ? 'kind-cam' : 'kind-mic') + '">' +
+      (d.kind === 'videoinput' ? '📷 摄像头' : '🎤 麦克风') + '</td><td>' +
+      (d.label || '(未授权, 名称不可见)') + '</td></tr>').join('');
+  }).catch(() => {});
+}
+
+function setBusy() {
+  $('btnCam').disabled = $('btnMic').disabled = $('btnBoth').disabled = true;
+  $('btnStop').disabled = false;
+}
+
+// 监听页面按钮: 统一在开始前置忙态
+document.addEventListener('click', (ev) => {
+  if (ev.target.tagName === 'BUTTON' && ev.target.id !== 'btnStop') setBusy();
+});
+
+refreshDevices();
+log('<span class="ok">✓ 页面已就绪</span> 点击上方按钮分别测试摄像头 / 麦克风 / 两者同时');
+</script>
+</body>
+</html>
